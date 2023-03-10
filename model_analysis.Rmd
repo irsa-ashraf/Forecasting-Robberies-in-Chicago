@@ -1,0 +1,529 @@
+---
+title: "model_analysis"
+author: "Irsa Ashraf"
+date: "2023-02-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tseries)
+library(forecast)
+library(TSA)
+library(vars)
+library(knitr)
+```
+
+Read data and check correlations of variables with Robbery 
+```{r}
+merge_data <- read.csv('merge_data.csv')
+
+vars <- c('ROBBERY', 'avg_temp', 'snowy_days', 'rainy_days', 'unemp')
+data <- merge_data[vars]
+cor(data)
+```
+ 
+Model 1: robb, avg_temp
+Model 2: robb, snowy days
+Model 3: robb, unemp
+Model 4: robb, avg_temp, unemp
+Model 5: robb, snowy_days, unemp
+
+
+TRAIN TEST SPLIT 
+```{r}
+# CHANGE TRAIN AND TEST
+# robbery 
+robbery_tsdf <- ts(data$ROBBERY, frequency = 12, start= 2001)
+
+train_robbery <- window(robbery_tsdf, start = c(2001, 1), end = c(2021, 12))
+test_robbery <- window(robbery_tsdf, start=c(2022, 1), end=c(2022, 12))
+
+# avg_temp
+temp_tsdf <- ts(data$avg_temp, frequency = 12, start= 2001)
+
+train_temp <- window(temp_tsdf, start = c(2001, 1), end = c(2021, 12))
+test_temp <- window(temp_tsdf, start=c(2022, 1), end=c(2022, 12))
+
+# Unemployment
+unemp_tsdf <- ts(data$unemp, frequency = 12, start= 2001)
+
+train_unemp <- window(unemp_tsdf, start = c(2001, 1), end = c(2021, 12))
+test_unemp <- window(unemp_tsdf, start=c(2022, 1), end=c(2022, 12))
+
+# snowy_days
+sd_tsdf <- ts(data$snowy_days, frequency = 12, start= 2001)
+
+train_sd <- window(sd_tsdf, start = c(2001, 1), end = c(2021, 12))
+test_sd <- window(sd_tsdf, start=c(2022, 1), end=c(2022, 12))
+
+# rainy_days
+rd_tsdf <- ts(data$rainy_days, frequency = 12, start= 2001)
+
+train_rd <- window(rd_tsdf, start = c(2001, 1), end = c(2021, 12))
+test_rd <- window(rd_tsdf, start=c(2022, 1), end=c(2022, 12))
+
+```
+
+
+```{r}
+# Function for back transformation 
+
+back_transform_fcsts <- function(fcst_data, train_deseas, boxcox_train, train_data) {
+  # add trend back 
+  xi <- train_deseas[length(train_deseas)]
+  diffinv_trend_fcst <- diffinv(fcst_data, differences=1, xi=xi)
+  # add seasonality back 
+  beg <- length(boxcox_train)-11
+  end <- length(boxcox_train)
+  diffinv_seas_fcst <- diffinv(diffinv_trend_fcst, lag=12, xi=boxcox_train[beg:end])
+  # get rid of boxcox transformation
+  fcst_reveresed <- InvBoxCox(diffinv_seas_fcst, lambda = BoxCox.lambda(train_data))
+  return(fcst_reveresed)
+  }
+```
+
+
+Data Preparation
+
+```{r}
+# ROBBERY
+# For the train dataset
+# BoxCox
+lambda_robb = BoxCox.lambda(train_robbery)
+robb_boxcox_train <- BoxCox(train_robbery, lambda = lambda_robb)
+
+# differencing 
+# kpss test p value = 0.01 so not stationary
+print(kpss.test(robb_boxcox_train))
+
+robb_train_deseas <- diff(robb_boxcox_train, lag = 12)
+print(kpss.test(robb_train_deseas))
+robb_train_stationary <- diff(robb_train_deseas, difference = 1)
+tsdisplay(robb_train_stationary)
+print(kpss.test(robb_train_stationary))
+# p-value = 0.1
+
+# Repeat for the test datatset?
+
+```
+
+A simple model that incorporating lags 1 and 12 is sufficient (session 4, slide 34)
+d = 1 and D = 1
+q = 1 and Q = 1
+
+
+AVG_TEMP
+BoxCox tranformation 
+```{r}
+# For the train dataset
+# BoxCox
+lambda_temp = BoxCox.lambda(train_temp)
+temp_boxcox_train <- BoxCox(train_temp, lambda = lambda_temp)
+
+tsdisplay(temp_boxcox_train, ylab="Avg Temperature", xlab="Time")
+
+# differencing 
+# kpss test p value = 0.1 so stationary
+print(kpss.test(temp_boxcox_train))
+print(adf.test(temp_boxcox_train))
+
+temp_train_deseas <- diff(temp_boxcox_train, lag = 12)
+print(kpss.test(temp_train_deseas))
+temp_train_stationary <- diff(temp_train_deseas, difference = 1)
+tsdisplay(temp_train_stationary)
+print(kpss.test(temp_train_stationary))
+# p-value = 0.1
+
+# Repeat for the test datatset?
+```
+
+UNEMPLOYMENT 
+```{r}
+# For the train dataset
+# BoxCox
+lambda_unemp = BoxCox.lambda(train_unemp)
+unemp_boxcox_train <- BoxCox(train_unemp, lambda = lambda_unemp)
+
+tsdisplay(unemp_boxcox_train, ylab="Unemployment", xlab="Time")
+
+# differencing 
+# kpss test p value = 0.1 so stationary
+print(kpss.test(unemp_boxcox_train))
+print(adf.test(unemp_boxcox_train))
+
+unemp_train_deseas <- diff(unemp_boxcox_train, lag = 12)
+print(kpss.test(unemp_train_deseas))
+unemp_train_stationary <- diff(unemp_train_deseas, difference = 1)
+tsdisplay(unemp_train_stationary)
+print(kpss.test(unemp_train_stationary))
+# p-value = 0.1
+
+# Repeat for the test datatset?
+
+```
+
+SNOWY DAYS 
+
+```{r}
+# For the train dataset
+# BoxCox
+lambda_sd = BoxCox.lambda(train_sd)
+sd_boxcox_train <- BoxCox(train_sd, lambda = lambda_sd)
+
+tsdisplay(sd_boxcox_train, ylab="Snowy Days", xlab="Time")
+
+# differencing 
+# kpss test p value = 0.1 so stationary
+print(kpss.test(sd_boxcox_train))
+print(adf.test(sd_boxcox_train))
+
+sd_train_deseas <- diff(sd_boxcox_train, lag = 12)
+print(kpss.test(sd_train_deseas))
+sd_train_stationary <- diff(sd_train_deseas, difference = 1)
+tsdisplay(sd_train_stationary)
+print(kpss.test(sd_train_stationary))
+# p-value = 0.1
+
+```
+
+RAINY DAYS 
+```{r}
+# For the train dataset
+# BoxCox
+lambda_rd = BoxCox.lambda(train_rd)
+rd_boxcox_train <- BoxCox(train_rd, lambda = lambda_rd)
+
+tsdisplay(rd_boxcox_train, ylab="Rainy Days", xlab="Time")
+
+# differencing 
+# kpss test p value = 0.1 so stationary
+print(kpss.test(rd_boxcox_train))
+print(adf.test(rd_boxcox_train))
+
+rd_train_deseas <- diff(rd_boxcox_train, lag = 12)
+print(kpss.test(rd_train_deseas))
+rd_train_stationary <- diff(rd_train_deseas, difference = 1)
+tsdisplay(rd_train_stationary)
+print(kpss.test(rd_train_stationary))
+# p-value = 0.1
+
+# Repeat for the test datatset?
+```
+
+FINAL MODELS 
+(presentation order)
+MODEL 1: robb, avg_temp
+p=5 better than p=4
+```{r}
+p_ = 5
+```
+
+
+```{r}
+# BIND VARIABLES TOGETEHR TO CREATE THE SYSTEM
+m1_variables <- cbind(robb_train_stationary, temp_train_stationary)
+
+# USE VARSELECT TO SELECT THE LAG ORDER
+
+# value to use for type?
+lagselect_m1 <- VARselect(m1_variables, type = "both")
+print(lagselect_m1$selection)
+
+# Apply the model with different values of p
+
+var_4_m1 <- VAR(m1_variables, p =p_, type = "both")
+serial.test(var_4_m1, lags.pt=12)
+# Used p = _ because of ......
+```
+```{r}
+forecasts_m1 <- forecast(var_4_m1, h=12)
+
+forecasts_m1 %>%
+  autoplot(robbery_tsdf) + xlab("Year")
+
+# PLOT FORECASTS 
+# ROBBERY
+
+robb_forecasts_m1 <- forecasts_m1$forecast$robb_train_stationary$mean
+robb_fcst_reveresed_m1 <- back_transform_fcsts(robb_forecasts_m1, robb_train_deseas, robb_boxcox_train, train_robbery)
+model_1_fcst <- window(robb_fcst_reveresed_m1, start=c(2022, 1), end=c(2022, 12))
+autoplot(robbery_tsdf) + 
+  autolayer(model_1_fcst)
+
+# Caluclate metrics 
+print(accuracy(model_1_fcst, test_robbery))
+
+# TEMPERATURE
+temp_forecasts_m1 <- forecasts_m1$forecast$temp_train_stationary$mean
+temp_fcst_reveresed_m1 <- back_transform_fcsts(temp_forecasts_m1, temp_train_deseas, temp_boxcox_train, train_temp)
+
+autoplot(temp_tsdf) + 
+  autolayer(temp_fcst_reveresed_m1)
+
+# Caluclate metrics 
+print(accuracy(temp_fcst_reveresed_m1, test_temp))
+```
+
+MODEL 2: robb, snowy_days
+
+```{r}
+# BIND VARIABLES TOGETEHR TO CREATE THE SYSTEM
+m2_variables <- cbind(robb_train_stationary, sd_train_stationary)
+
+# USE VARSELECT TO SELECT THE LAG ORDER
+
+# value to use for type?
+lagselect_m2 <- VARselect(m2_variables, type = "both")
+print(lagselect_m2$selection)
+
+# Apply the model with different values of p
+
+var_4_m2 <- VAR(m2_variables, p =p_, type = "both")
+serial.test(var_4_m2, lags.pt=12)
+# Used p = _ because of ......
+```
+```{r}
+forecasts_m2 <- forecast(var_4_m2, h=12)
+
+forecasts_m2 %>%
+  autoplot(robbery_tsdf) + xlab("Year")
+
+# FORECAST PLOTS AND METRICS 
+# ROBBERY
+
+robb_forecasts_m2 <- forecasts_m2$forecast$robb_train_stationary$mean
+robb_fcst_reveresed_m2 <- back_transform_fcsts(robb_forecasts_m2, robb_train_deseas, robb_boxcox_train, train_robbery)
+
+model_2_fcst <- window(robb_fcst_reveresed_m2, start=c(2022, 1), end=c(2022, 12))
+autoplot(robbery_tsdf) + 
+  autolayer(model_2_fcst)
+
+# Caluclate metrics 
+print(accuracy(model_2_fcst, test_robbery))
+
+# SNOWY DAYS
+sd_forecasts_m2 <- forecasts_m2$forecast$sd_train_stationary$mean
+sd_fcst_reveresed_m2 <- back_transform_fcsts(sd_forecasts_m2, sd_train_deseas, sd_boxcox_train, train_sd)
+
+autoplot(sd_tsdf) + 
+  autolayer(sd_fcst_reveresed_m2)
+
+# Caluclate metrics 
+print(accuracy(sd_fcst_reveresed_m2, test_sd))
+```
+
+MODEL 3: robb, unemp
+
+```{r}
+# BIND VARIABLES TOGETEHR TO CREATE THE SYSTEM
+m3_variables <- cbind(robb_train_stationary, unemp_train_stationary)
+
+# USE VARSELECT TO SELECT THE LAG ORDER
+
+# value to use for type?
+lagselect_m3 <- VARselect(m3_variables, type = "both")
+print(lagselect_m3$selection)
+
+# Apply the model with different values of p
+
+var_4_m3 <- VAR(m3_variables, p =p_, type = "both")
+serial.test(var_4_m3, lags.pt=12)
+# Used p = _ because of ......
+
+# FORECASTS AND PLOTS 
+forecasts_m3 <- forecast(var_4_m3, h=12)
+
+forecasts_m3 %>%
+  autoplot(robbery_tsdf) + xlab("Year")
+
+# ROBBERY
+
+robb_forecasts_m3 <- forecasts_m3$forecast$robb_train_stationary$mean
+robb_fcst_reveresed_m3 <- back_transform_fcsts(robb_forecasts_m3, robb_train_deseas, robb_boxcox_train, train_robbery)
+
+model_3_fcst <- window(robb_fcst_reveresed_m3, start=c(2022, 1), end=c(2022, 12))
+autoplot(robbery_tsdf) + 
+  autolayer(model_3_fcst)
+
+# Caluclate metrics 
+print(accuracy(model_3_fcst, test_robbery))
+
+# UNEMPLOYMENT
+
+unemp_forecasts_m3 <- forecasts_m3$forecast$unemp_train_stationary$mean
+unemp_fcst_reveresed_m3 <- back_transform_fcsts(unemp_forecasts_m3, unemp_train_deseas, unemp_boxcox_train, train_unemp)
+
+autoplot(unemp_tsdf) + 
+  autolayer(unemp_fcst_reveresed_m3)
+
+# Caluclate metrics 
+print(accuracy(unemp_fcst_reveresed_m3, test_unemp))
+```
+
+
+MODEL 4: robb, avg_temp, unemp
+```{r}
+# BIND VARIABLES TOGETEHR TO CREATE THE SYSTEM
+m4_variables <- cbind(robb_train_stationary, temp_train_stationary, unemp_train_stationary)
+
+# USE VARSELECT TO SELECT THE LAG ORDER
+lagselect_m4 <- VARselect(m4_variables, type = "both")
+print(lagselect_m4$selection)
+
+var_4_m4 <- VAR(m4_variables, p = p_, type = "both")
+serial.test(var_4_m4, lags.pt=12)
+
+# FORECAST
+forecasts_m4 <- forecast(var_4_m4, h=12)
+
+forecasts_m4 %>%
+  autoplot(robbery_tsdf) + xlab("Year")
+
+# PLOT FORECASTS 
+# ROBBERY
+
+# BACK TRANSFORM SNOWY DAYS AND CALCULATE RMSE WITH TEST DATASET
+robb_forecasts_m4 <- forecasts_m4$forecast$robb_train_stationary$mean
+robb_fcst_reveresed_m4 <- back_transform_fcsts(robb_forecasts_m4, robb_train_deseas, robb_boxcox_train, train_robbery)
+
+# forecast <- robb_fcst_reveresed_m4
+model_4_fcst <- window(robb_fcst_reveresed_m4, start=c(2022, 1), end=c(2022, 12))
+robberies <- window(robbery_tsdf, start=c(2010, 1), end=c(2022, 12))
+autoplot(robberies) + 
+  autolayer(model_4_fcst)
+
+# Caluclate metrics 
+print(accuracy(model_4_fcst, test_robbery))
+
+# TEMPERATURE 
+# BACK TRANSFORM SNOWY DAYS AND CALCULATE RMSE WITH TEST DATASET
+temp_forecasts_m4 <- forecasts_m4$forecast$temp_train_stationary$mean
+temp_fcst_reveresed_m4 <- back_transform_fcsts(temp_forecasts_m4, temp_train_deseas, temp_boxcox_train, train_temp)
+
+temp_model_4_fcst <- window(temp_fcst_reveresed_m4, start=c(2022, 1), end=c(2022, 12))
+forecast <- temp_model_4_fcst
+temperature <- window(temp_tsdf, start=c(2010, 1), end=c(2022, 12))
+
+autoplot(temperature) + 
+  autolayer(forecast)
+
+# Caluclate metrics 
+print(accuracy(temp_model_4_fcst, test_temp))
+
+# UNEMPLOYMENT 
+unemp_forecasts_m4 <- forecasts_m4$forecast$unemp_train_stationary$mean
+unemp_fcst_reveresed_m4 <- back_transform_fcsts(unemp_forecasts_m4, unemp_train_deseas, unemp_boxcox_train, train_unemp)
+
+unemp_model_4_fcst <- window(unemp_fcst_reveresed_m4, start=c(2022, 1), end=c(2022, 12))
+forecast <- unemp_model_4_fcst
+unemployment <- window(unemp_tsdf, start=c(2010, 1), end=c(2022, 12))
+autoplot(unemployment) + 
+  autolayer(forecast)
+
+# Caluclate metrics 
+print(accuracy(unemp_fcst_reveresed_m4, test_unemp))
+
+```
+
+```{r}
+checkresiduals(resid(var_4_m4)[, 1])
+```
+
+```{r}
+resid_m4 <- resid(var_4_m4)[, 1]
+print(Box.test(resid_m4))
+```
+p-value greater than 0.05 (p=0.9), faill to reject the null hypothesis - no serial correlation
+
+
+MODEL 5: robb, snowy_days, unemp
+
+```{r}
+# Model 5: robb, avg_temp, snowy_days, unemp
+# BIND VARIABLES TOGETEHR TO CREATE THE SYSTEM
+m5_variables <- cbind(robb_train_stationary, sd_train_stationary, unemp_train_stationary)
+
+# USE VARSELECT TO SELECT THE LAG ORDER
+
+# value to use for type?
+lagselect_m5 <- VARselect(m5_variables, type = "both")
+print(lagselect_m5$selection)
+
+# Apply the model with different values of p
+var_4_m5 <- VAR(m5_variables, p = p_, type = "both")
+# serial.test(var_4, lags.pt=12)
+
+# FORECAST
+forecasts_m5 <- forecast(var_4_m5, h=12)
+
+forecasts_m5 %>%
+  autoplot(robbery_tsdf) + xlab("Year")
+
+# PLOT FORECASTS 
+# ROBBERY
+
+# BACK TRANSFORM SNOWY DAYS AND CALCULATE RMSE WITH TEST DATASET
+robb_forecasts_m5 <- forecasts_m5$forecast$robb_train_stationary$mean
+robb_fcst_reveresed_m5 <- back_transform_fcsts(robb_forecasts_m5, robb_train_deseas, robb_boxcox_train, train_robbery)
+
+model_5_fcst <- window(robb_fcst_reveresed_m5, start=c(2022, 1), end=c(2022, 12))
+autoplot(robbery_tsdf) + 
+  autolayer(model_5_fcst)
+
+# Caluclate metrics 
+print(accuracy(model_5_fcst, test_robbery))
+
+
+# UNEMPLOYMENT 
+unemp_forecasts_m5 <- forecasts_m5$forecast$unemp_train_stationary$mean
+unemp_fcst_reveresed_m5 <- back_transform_fcsts(unemp_forecasts_m5, unemp_train_deseas, unemp_boxcox_train, train_unemp)
+
+autoplot(unemp_tsdf) + 
+  autolayer(unemp_fcst_reveresed_m5)
+
+# Caluclate metrics 
+print(accuracy(unemp_fcst_reveresed_m5, test_unemp))
+
+# SNOWY DAYS 
+sd_forecasts_m5 <- forecasts_m5$forecast$sd_train_stationary$mean
+sd_fcst_reveresed_m5 <- back_transform_fcsts(sd_forecasts_m5, sd_train_deseas, sd_boxcox_train, train_sd)
+
+autoplot(sd_tsdf) + 
+  autolayer(sd_fcst_reveresed_m5)
+
+# Caluclate metrics 
+print(accuracy(sd_fcst_reveresed_m5, test_sd))
+
+
+```
+PLOTTING ALL MODEL FORECASTS
+
+```{r}
+# robbery_segment <- window(robbery_tsdf, start = c(2015, 1), end=c(2022, 12))
+
+#model_1 <- robb_fcst_reveresed_m1
+model_1 <- window(robb_fcst_reveresed_m1, start=c(2022, 1), end=c(2022, 12))
+#model_2 <- robb_fcst_reveresed_m2
+model_2 <- window(robb_fcst_reveresed_m2, start=c(2022, 1), end=c(2022, 12))
+# model_3 <- robb_fcst_reveresed_m3
+model_3 <- window(robb_fcst_reveresed_m3, start=c(2022, 1), end=c(2022, 12))
+# model_4 <- robb_fcst_reveresed_m4
+model_4 <- window(robb_fcst_reveresed_m4, start=c(2022, 1), end=c(2022, 12))
+# model_5 <- robb_fcst_reveresed_m5
+model_5 <- window(robb_fcst_reveresed_m5, start=c(2022, 1), end=c(2022, 12))
+robberies <- window(robbery_tsdf, start=c(2016, 1), end=c(2022, 12))
+
+autoplot(robberies) + 
+  autolayer(model_1) +
+  autolayer(model_2) +
+  autolayer(model_3) + 
+  autolayer(model_4) + 
+  autolayer(model_5)
+```
+
